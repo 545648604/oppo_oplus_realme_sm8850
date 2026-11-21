@@ -669,6 +669,17 @@ jobs:
           sudo rm -rf /usr/local/lib/android &
           sudo rm -rf /opt/ghc &
           sudo rm -rf /opt/hostedtoolcache/CodeQL &
+
+          # 修复 clang19 对 libbpf 的 -Werror const 限定符报错（resolve_btfids host 工具）
+          # 上游 libbpf.c 用 char* 接收 strstr/strchr 返回值，clang19 视为丢弃 const 并 -Werror 中断编译
+          BPF_SRC=$(find ./common/tools -name libbpf.c 2>/dev/null | head -n1)
+          if [ -n "$BPF_SRC" ] && [ -f "$BPF_SRC" ]; then
+            sed -i 's/res = strstr(sym_name/res = (char \*)strstr(sym_name/' "$BPF_SRC"
+            sed -i 's/next_path = strchr(s/next_path = (char \*)strchr(s/' "$BPF_SRC"
+            echo "libbpf const cast patch applied"
+            grep -n 'res = (char \*)strstr\|next_path = (char \*)strchr' "$BPF_SRC" || true
+          fi
+
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="clang" LD="ld.lld" OBJCOPY="llvm-objcopy" O=out gki_defconfig &&
           export CC="$(pwd)/cc-wrapper" && export LD="$(pwd)/ld-wrapper" &&
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out Image
